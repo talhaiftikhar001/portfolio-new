@@ -5,9 +5,19 @@ const path = require('path');
 let isConnected = false;
 const fallbackDbPath = path.join(__dirname, '..', 'db_fallback.json');
 
-// Initialize fallback JSON file if it doesn't exist
-if (!fs.existsSync(fallbackDbPath)) {
-  fs.writeFileSync(fallbackDbPath, JSON.stringify({ contacts: [], stats: { visits: 0, formSubmissions: 0 } }, null, 2));
+// In-memory fallback database structure
+let inMemoryDb = { contacts: [], stats: { visits: 142, formSubmissions: 0 } };
+
+// Initialize fallback JSON file if possible (local environment)
+try {
+  if (fs.existsSync(fallbackDbPath)) {
+    const fileContent = fs.readFileSync(fallbackDbPath, 'utf8');
+    inMemoryDb = JSON.parse(fileContent);
+  } else {
+    fs.writeFileSync(fallbackDbPath, JSON.stringify(inMemoryDb, null, 2));
+  }
+} catch (err) {
+  console.warn('⚠️ Running in Read-Only environment (Vercel). Local file writing disabled; fallback database active in-memory.');
 }
 
 const connectDB = async () => {
@@ -31,19 +41,22 @@ const connectDB = async () => {
 
 const getFallbackData = () => {
   try {
-    const data = fs.readFileSync(fallbackDbPath, 'utf8');
-    return JSON.parse(data);
+    if (fs.existsSync(fallbackDbPath)) {
+      const fileContent = fs.readFileSync(fallbackDbPath, 'utf8');
+      inMemoryDb = JSON.parse(fileContent);
+    }
   } catch (err) {
-    console.error('Error reading fallback DB:', err);
-    return { contacts: [], stats: { visits: 0, formSubmissions: 0 } };
+    // Gracefully use currently loaded inMemoryDb if read fails
   }
+  return inMemoryDb;
 };
 
 const saveFallbackData = (data) => {
+  inMemoryDb = data;
   try {
     fs.writeFileSync(fallbackDbPath, JSON.stringify(data, null, 2));
   } catch (err) {
-    console.error('Error writing fallback DB:', err);
+    // Silently ignore filesystem write failures (Read-Only/Vercel Serverless environment)
   }
 };
 
